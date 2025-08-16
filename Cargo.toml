@@ -1,0 +1,17 @@
+[package]
+name = "a9nloader-rs"
+version = "0.1.0"
+edition = "2024"
+authors = ['Rekka "horizon" IGUMI']
+
+[dependencies]
+uefi = { version = "0.35", features = ["alloc", "global_allocator", "logger", "panic_handler"] }
+xmas-elf = "0.10.0"
+embedded-graphics = "0.8.1"
+embedded-text = { version = "0.7.2", features = ["ansi"] }
+
+[profiles.dev]
+panic = "abort"
+
+[profiles.release]
+panic = "abort"
