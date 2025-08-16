@@ -26,4 +26,7 @@ pub trait Screen {
     fn clear(&mut self);
     fn draw_pixel(&mut self, x: usize, y: usize, color: Color);
     fn pixel_at(&mut self, x: usize, y: usize) -> Color;
+
+    fn flush(&mut self, x: usize, y: usize);
+    fn flush_all(&mut self);
 }

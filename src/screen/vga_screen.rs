@@ -1,17 +1,23 @@
 use crate::screen;
 
 use core::slice;
-use embedded_graphics::pixelcolor::Rgb888;
 use uefi::boot;
+use uefi::proto::console::gop::BltPixel;
 
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::{OriginDimensions, Point, Size};
+use embedded_graphics::pixelcolor::Rgb888;
 use embedded_graphics::prelude::*;
+
+extern crate alloc;
+use alloc::vec;
 
 pub struct VgaScreen {
     screen_width: usize,
     screen_height: usize,
     gop: uefi::boot::ScopedProtocol<uefi::proto::console::gop::GraphicsOutput>,
+
+    back_buffer: vec::Vec<BltPixel>,
 }
 
 impl VgaScreen {
@@ -23,25 +29,85 @@ impl VgaScreen {
                 .unwrap();
 
         let (width, height) = gop.current_mode_info().resolution();
+        let mut back_buffer = vec::Vec::new();
+        back_buffer.resize(width * height, BltPixel::new(0, 0, 0));
+
         VgaScreen {
             screen_width: width as usize,
             screen_height: height as usize,
             gop,
+            back_buffer,
         }
+    }
+
+    #[inline]
+    fn index(&self, x: usize, y: usize) -> usize {
+        y * self.screen_width + x
+    }
+
+    #[inline]
+    fn to_blt(color: screen::Color) -> BltPixel {
+        BltPixel::new(color.red, color.green, color.blue)
+    }
+
+    #[inline]
+    fn from_blt(pixel: BltPixel) -> screen::Color {
+        screen::Color {
+            red: pixel.red,
+            green: pixel.green,
+            blue: pixel.blue,
+            alpha: 0xff, // Assuming full opacity
+        }
+    }
+
+    pub fn present(&mut self) -> Result<(), uefi::Error> {
+        self.gop
+            .blt(uefi::proto::console::gop::BltOp::BufferToVideo {
+                buffer: &self.back_buffer,
+                src: uefi::proto::console::gop::BltRegion::Full,
+                dest: (0, 0),
+                dims: (self.screen_width, self.screen_height),
+            })
+    }
+
+    pub fn present_pixel(&mut self, x: usize, y: usize) -> Result<(), uefi::Error> {
+        self.gop
+            .blt(uefi::proto::console::gop::BltOp::BufferToVideo {
+                buffer: &self.back_buffer,
+                src: uefi::proto::console::gop::BltRegion::SubRectangle {
+                    coords: (x, y),
+                    px_stride: self.screen_width,
+                },
+                dest: (x, y),
+                dims: (1, 1),
+            })
+    }
+
+    pub fn present_region(
+        &mut self,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> Result<(), uefi::Error> {
+        self.gop
+            .blt(uefi::proto::console::gop::BltOp::BufferToVideo {
+                buffer: &self.back_buffer,
+                src: uefi::proto::console::gop::BltRegion::SubRectangle {
+                    coords: (x, y),
+                    px_stride: self.screen_width,
+                },
+                dest: (x, y),
+                dims: (width, height),
+            })
     }
 }
 
 // TODO: implement double buffering
 impl screen::Screen for VgaScreen {
     fn pixel_at(&mut self, x: usize, y: usize) -> screen::Color {
-        // This is a stub implementation; actual pixel reading would require more work.
-        let offset = ((y * self.width()) + x) * 4;
-        screen::Color {
-            red: unsafe { self.gop.frame_buffer().read_byte(offset + 2) },
-            green: unsafe { self.gop.frame_buffer().read_byte(offset + 1) },
-            blue: unsafe { self.gop.frame_buffer().read_byte(offset + 0) },
-            alpha: 0xff, // Assuming full opacity
-        }
+        let pixel = self.back_buffer[self.index(x, y)];
+        Self::from_blt(pixel)
     }
 
     fn width(&self) -> usize {
@@ -66,48 +132,41 @@ impl screen::Screen for VgaScreen {
     }
 
     fn raw_buffer(&mut self) -> &mut [u8] {
-        unsafe {
-            core::slice::from_raw_parts_mut(
-                self.gop.frame_buffer().as_mut_ptr(),
-                self.buffer_size(),
-            )
-        }
+        let length = self.screen_width * self.screen_height * core::mem::size_of::<BltPixel>();
+        let pointer = self.back_buffer.as_mut_ptr() as *mut u8;
+        unsafe { core::slice::from_raw_parts_mut(pointer, length) }
     }
 
     fn clear(&mut self) {
-        for y in 0..self.height() {
-            for x in 0..self.width() {
-                self.draw_pixel(x, y, screen::Color {
-                    red: 0,
-                    green: 0,
-                    blue: 0,
-                    alpha: 0xff,
-                });
-            }
+        let black = BltPixel::new(0, 0, 0);
+        let _ = self.gop.blt(uefi::proto::console::gop::BltOp::VideoFill {
+            color: black,
+            dest: (0, 0),
+            dims: (self.screen_width, self.screen_height),
+        });
+
+        for pixel in &mut self.back_buffer {
+            *pixel = black;
         }
 
-        let _ =
-            uefi::system::with_stdout(|stdout| uefi::proto::console::text::Output::clear(stdout));
+        let _ = uefi::system::with_stdout(|stdout| {
+            let _ = uefi::proto::console::text::Output::clear(stdout);
+            uefi::proto::console::text::Output::reset(stdout, true)
+        });
     }
 
     fn draw_pixel(&mut self, x: usize, y: usize, color: screen::Color) {
-        let offset = ((y * self.width()) + x) * 4;
-        let _ = unsafe {
-            match self.mode() {
-                screen::Mode::BGRA => {
-                    self.gop.frame_buffer().write_byte(offset + 0, color.blue);
-                    self.gop.frame_buffer().write_byte(offset + 1, color.green);
-                    self.gop.frame_buffer().write_byte(offset + 2, color.red);
-                    self.gop.frame_buffer().write_byte(offset + 3, color.alpha);
-                }
-                screen::Mode::RGBA => {
-                    self.gop.frame_buffer().write_byte(offset + 0, color.red);
-                    self.gop.frame_buffer().write_byte(offset + 1, color.green);
-                    self.gop.frame_buffer().write_byte(offset + 2, color.blue);
-                    self.gop.frame_buffer().write_byte(offset + 3, color.alpha);
-                }
-            }
-        };
+        let index = self.index(x, y);
+        self.back_buffer[index] = Self::to_blt(color);
+        // let _ = self.present_pixel(x, y);
+    }
+
+    fn flush(&mut self, x: usize, y: usize) {
+        let _ = self.present_pixel(x, y);
+    }
+
+    fn flush_all(&mut self) {
+        let _ = self.present();
     }
 }
 
@@ -149,25 +208,14 @@ impl DrawTarget for VgaScreen {
             let x = point_x as usize;
             let y = point_y as usize;
 
-            let offset = ((y * <Self as screen::Screen>::width(self)) + x) * 4;
-
-            match <Self as screen::Screen>::mode(self) {
-                screen::Mode::BGRA => {
-                    let frame_buffer = <Self as screen::Screen>::raw_buffer(self);
-                    frame_buffer[offset] = color.b();
-                    frame_buffer[offset + 1] = color.g();
-                    frame_buffer[offset + 2] = color.r();
-                    frame_buffer[offset + 3] = 0xff; // Assuming full opacity
-                }
-                screen::Mode::RGBA => {
-                    let frame_buffer = <Self as screen::Screen>::raw_buffer(self);
-                    frame_buffer[offset] = color.r();
-                    frame_buffer[offset + 1] = color.g();
-                    frame_buffer[offset + 2] = color.b();
-                    frame_buffer[offset + 3] = 0xff; // Assuming full opacity
-                }
-            }
+            <Self as screen::Screen>::draw_pixel(self, x, y, screen::Color {
+                red: color.r(),
+                green: color.g(),
+                blue: color.b(),
+                alpha: 0xff, // Assuming full opacity
+            });
         }
+        // <Self as screen::Screen>::flush_all(self);
 
         Ok(())
     }

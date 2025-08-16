@@ -10,7 +10,6 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::renderer::CharacterStyle,
 };
-
 use embedded_text::{
     TextBox,
     alignment::HorizontalAlignment,
@@ -24,6 +23,9 @@ struct VirtualConsole<'a> {
     cursor: Point,
 }
 
+const CONSOLE_WIDTH_OFFSET: i32 = 10;
+const CONSOLE_HEIGHT_OFFSET: i32 = 100;
+
 impl core::fmt::Write for VirtualConsole<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         #[allow(static_mut_refs)]
@@ -36,10 +38,11 @@ impl core::fmt::Write for VirtualConsole<'_> {
                 for line in s.lines() {
                     // scroll
                     if self.cursor.y + line_height > screen_height {
-                        // screen.clear(Rgb888::CSS_DARK_GRAY).ok(); // エラーは無視
+                        screen.clear(Rgb888::BLACK).ok(); // エラーは無視
+                        // clear lines
 
                         // reset cursor position
-                        self.cursor.y = 10;
+                        self.cursor.y = CONSOLE_HEIGHT_OFFSET;
                     }
 
                     if !line.is_empty() {
@@ -48,7 +51,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
                             Size::new(screen.size().width - self.cursor.x as u32, 0),
                         );
 
-                        let textbox = TextBox::with_textbox_style(
+                        let mut textbox = TextBox::with_textbox_style(
                             line,
                             bounds,
                             self.character_style,
@@ -61,6 +64,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
 
                     self.cursor.y += line_height;
                 }
+                let _ = screen::Screen::flush_all(screen);
                 Some(())
             });
         }
@@ -85,7 +89,7 @@ pub fn _print(args: core::fmt::Arguments) {
             VIRTUAL_CONSOLE = Some(VirtualConsole {
                 textbox_style,
                 character_style,
-                cursor: Point::new(10, 10),
+                cursor: Point::new(CONSOLE_WIDTH_OFFSET, CONSOLE_HEIGHT_OFFSET),
             });
         }
 

@@ -1,3 +1,7 @@
 /target
 
 .DS_Store
+*.EFI
+*.o
+*.a
+*.img

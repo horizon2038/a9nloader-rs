@@ -59,11 +59,10 @@ fn log_a9nloader_info() {
     warn!("This is a test warning message.");
     error!("This is a test error message.");
     debug!("This is a test debug message.");
-    /*
+
     for _ in 0..100 {
-        println!("test...");
+        info!("test...");
     }
-    */
 }
 
 fn draw_bmp(splash: &[u8]) {
@@ -108,6 +107,7 @@ fn draw_bmp(splash: &[u8]) {
             });
         }
     }
+    screen.flush_all();
 }
 
 fn get_bmp_dimensions(header: &[u8]) -> Option<(usize, usize)> {
