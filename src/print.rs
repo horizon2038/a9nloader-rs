@@ -4,7 +4,7 @@ use uefi;
 
 use embedded_graphics;
 use embedded_graphics::{
-    mono_font::{MonoTextStyle, ascii::FONT_9X18},
+    mono_font::{MonoTextStyle, ascii::*},
     pixelcolor::Rgb888,
     prelude::*,
     primitives::Rectangle,
@@ -24,7 +24,7 @@ struct VirtualConsole<'a> {
 }
 
 const CONSOLE_WIDTH_OFFSET: i32 = 10;
-const CONSOLE_HEIGHT_OFFSET: i32 = 100;
+const CONSOLE_HEIGHT_OFFSET: i32 = 80;
 
 impl core::fmt::Write for VirtualConsole<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
@@ -80,7 +80,7 @@ pub fn _print(args: core::fmt::Arguments) {
     unsafe {
         #[allow(static_mut_refs)]
         if VIRTUAL_CONSOLE.is_none() {
-            let character_style = MonoTextStyle::new(&FONT_9X18, Rgb888::WHITE);
+            let character_style = MonoTextStyle::new(&FONT_6X12, Rgb888::WHITE);
             let textbox_style = TextBoxStyleBuilder::new()
                 .height_mode(HeightMode::FitToText)
                 .alignment(HorizontalAlignment::Left)
@@ -122,27 +122,27 @@ macro_rules! println {
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
-        $crate::println!("[\x1b[32m INFO\x1b[37m] {}", core::format_args!($($arg)*));
+        $crate::print::_print(core::format_args!("[\x1b[32m INFO\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
     };
 }
 
 #[macro_export]
 macro_rules! warn {
     ($($arg:tt)*) => {
-        $crate::println!("[\x1b[33m WARN\x1b[37m] {}", core::format_args!($($arg)*));
+        $crate::print::_print(core::format_args!("[\x1b[33m WARN\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
     };
 }
 
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {
-        $crate::println!("[\x1b[31mERROR\x1b[37m] {}", core::format_args!($($arg)*));
+        $crate::print::_print(core::format_args!("[\x1b[31mERROR\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
     };
 }
 
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {
-        $crate::println!("[\x1b[34mDEBUG\x1b[37m] {}", core::format_args!($($arg)*));
+        $crate::print::_print(core::format_args!("[\x1b[34mDEBUG\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
     };
 }

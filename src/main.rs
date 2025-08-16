@@ -4,20 +4,20 @@
 
 mod screen;
 use screen::Screen;
-
+mod gui;
 mod print;
-use print::*;
 
-use core::option::Option;
-
-use embedded_graphics;
 use uefi::prelude::*;
-// use uefi::println;
 
 #[entry]
 fn main() -> Status {
     uefi_init();
+    gui_init();
+
     log_a9nloader_info();
+    info!("Loading Kernel...");
+    info!("Loading Init...");
+    info!("Jump to Kernel...");
 
     loop {}
 
@@ -43,98 +43,36 @@ const A9NLOADER_LOGO: &str = r#"
 "#;
 
 const A9N_SPLASH_BMP: &[u8] = include_bytes!("../a9n-project.bmp");
+const A9N_LOADER_SPLASH_BMP: &[u8] = include_bytes!("../a9n-loader.bmp");
 
-fn log_a9nloader_info() {
-    draw_bmp(A9N_SPLASH_BMP);
+fn gui_init() {
+    gui::draw_bmp(A9N_LOADER_SPLASH_BMP, 0, 0);
 
-    println!("{}", A9NLOADER_LOGO);
-    println!(
-        "A9NLoader-rs v{}, written by {}",
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_AUTHORS")
-    );
-    println!("Press any key to continue...");
+    let screen = screen::current_screen();
+    let width = screen.width();
+    let height = screen.height();
+    // let header_dimensions = gui::get_bmp_dimensions(A9N_SPLASH_BMP).unwrap_or((0, 0));
 
-    info!("A9NLoader initialized successfully.");
-    warn!("This is a test warning message.");
-    error!("This is a test error message.");
-    debug!("This is a test debug message.");
-
-    for _ in 0..100 {
-        info!("test...");
-    }
-}
-
-fn draw_bmp(splash: &[u8]) {
-    // let mut screen = screen::VgaScreen::new();
-    #[allow(static_mut_refs)]
-    let mut screen = unsafe { screen::SCREEN.as_mut().unwrap() };
-    // screen.clear();
-
-    let bmp_dimensions = get_bmp_dimensions(splash).unwrap_or((0, 0));
-
-    let scale_x = screen.width() as f32 / bmp_dimensions.0 as f32;
-    let scale_y = screen.height() as f32 / bmp_dimensions.1 as f32;
-    let scale = if scale_x < scale_y { scale_x } else { scale_y };
-
-    let scaled_width = (bmp_dimensions.0 as f32 * scale) as usize;
-    let scaled_height = (bmp_dimensions.1 as f32 * scale) as usize;
-
-    let start_x = (screen.width() - scaled_width) / 2;
-    let start_y = (screen.height() - scaled_height) / 2;
-
-    let pixel_data = &splash[54..];
-
-    for y in 0..scaled_height {
-        for x in 0..scaled_width {
-            let src_x = (x as f32 / scale) as usize;
-            let src_y = (y as f32 / scale) as usize;
-
-            let offset = (src_y * bmp_dimensions.0 + src_x) * 3;
-            if offset + 2 >= pixel_data.len() {
-                continue; // Prevent out-of-bounds access
-            }
-
-            let blue = pixel_data[offset];
-            let green = pixel_data[offset + 1];
-            let red = pixel_data[offset + 2];
-
-            screen.draw_pixel(start_x + x, start_y + y, screen::Color {
-                red,
-                green,
-                blue,
+    for y in 80..height {
+        for x in 0..width {
+            screen.draw_pixel(x, y, screen::Color {
+                red: 0x14,
+                green: 0x14,
+                blue: 0x14,
                 alpha: 0xff,
             });
         }
     }
-    screen.flush_all();
 }
 
-fn get_bmp_dimensions(header: &[u8]) -> Option<(usize, usize)> {
-    if header.len() < 18 {
-        return None; // Not enough data for dimensions
-    }
-
-    // width: 18 +4
-    let width_bytes = &header[18..22];
-    // height: 22 +4
-    let height_bytes = &header[22..26];
-
-    let width = u32::from_le_bytes([
-        width_bytes[0],
-        width_bytes[1],
-        width_bytes[2],
-        width_bytes[3],
-    ]) as usize;
-
-    // height is stored as a signed integer in BMP files, but we treat it as unsigned here.
-    let height_raw = i32::from_le_bytes([
-        height_bytes[0],
-        height_bytes[1],
-        height_bytes[2],
-        height_bytes[3],
-    ]);
-    let height = height_raw.abs() as usize;
-
-    Some((width, height))
+fn log_a9nloader_info() {
+    println!("{}", A9NLOADER_LOGO);
+    info!(
+        "A9NLoader-rs v{}, written by {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_AUTHORS"),
+    );
+    warn!("This is a test warning message.");
+    error!("This is a test error message.");
+    debug!("This is a test debug message.");
 }

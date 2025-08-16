@@ -228,3 +228,9 @@ pub fn init_screen() {
 }
 
 pub static mut SCREEN: Option<VgaScreen> = None;
+pub fn current_screen() -> &'static mut VgaScreen {
+    #[allow(static_mut_refs)]
+    unsafe {
+        SCREEN.as_mut().unwrap()
+    }
+}
