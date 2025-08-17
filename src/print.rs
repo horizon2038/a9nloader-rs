@@ -2,6 +2,9 @@ use crate::screen;
 use core::fmt::Write;
 use uefi;
 
+extern crate alloc;
+use alloc::vec;
+
 use embedded_graphics;
 use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::*},
@@ -21,6 +24,7 @@ struct VirtualConsole<'a> {
     textbox_style: TextBoxStyle,
     character_style: MonoTextStyle<'a, Rgb888>,
     cursor: Point,
+    line_buffer: vec::Vec<u8>,
 }
 
 const CONSOLE_WIDTH_OFFSET: i32 = 10;
@@ -48,7 +52,11 @@ impl core::fmt::Write for VirtualConsole<'_> {
                     if !line.is_empty() {
                         let bounds = Rectangle::new(
                             self.cursor,
-                            Size::new(screen.size().width - self.cursor.x as u32, 0),
+                            // Size::new(screen.size().width - self.cursor.x as u32, 0),
+                            Size::new(
+                                screen.size().width,
+                                self.character_style.font.character_size.height as u32,
+                            ),
                         );
 
                         let mut textbox = TextBox::with_textbox_style(
@@ -81,15 +89,26 @@ pub fn _print(args: core::fmt::Arguments) {
         #[allow(static_mut_refs)]
         if VIRTUAL_CONSOLE.is_none() {
             let character_style = MonoTextStyle::new(&FONT_6X12, Rgb888::WHITE);
+            let line_height = character_style.font.character_size.height as i32;
             let textbox_style = TextBoxStyleBuilder::new()
-                .height_mode(HeightMode::FitToText)
-                .alignment(HorizontalAlignment::Left)
+                .height_mode(HeightMode::Exact(
+                    embedded_text::style::VerticalOverdraw::Hidden,
+                ))
+                .line_height(embedded_graphics::text::LineHeight::Pixels(
+                    line_height as u32,
+                ))
+                .trailing_spaces(false)
+                .paragraph_spacing(0)
                 .build();
+
+            let mut line_buffer = vec::Vec::<u8>::new();
+            line_buffer.resize(512, 0);
 
             VIRTUAL_CONSOLE = Some(VirtualConsole {
                 textbox_style,
                 character_style,
                 cursor: Point::new(CONSOLE_WIDTH_OFFSET, CONSOLE_HEIGHT_OFFSET),
+                line_buffer,
             });
         }
 
@@ -108,41 +127,82 @@ pub fn _print(args: core::fmt::Arguments) {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => ($crate::print::_print(core::format_args!($($arg)*)));
+    ($($arg:tt)*) => {{
+        extern crate alloc;
+        let __line = alloc::format!($($arg)*);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
 }
 
 #[macro_export]
 macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($($arg:tt)*) => {
-        $crate::print::_print(core::format_args!("{}{}", core::format_args!($($arg)*), "\n"))
-    };
+    () => {{
+        $crate::print::_print(core::format_args!("\n"));
+    }};
+    ($fmt:literal $(, $($arg:tt)+)?) => {{
+        extern crate alloc;
+        let __line = alloc::format!(concat!($fmt, "\n") $(, $($arg)+)?);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
+    ($($arg:tt)*) => {{
+        let __payload = alloc::format!($($arg)*);
+        let __line = alloc::format!("{}\n", __payload);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
 }
 
 #[macro_export]
 macro_rules! info {
-    ($($arg:tt)*) => {
-        $crate::print::_print(core::format_args!("[\x1b[32m INFO\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
-    };
+    ($fmt:literal $(, $($arg:tt)+)?) => {{
+        extern crate alloc;
+        let __line = alloc::format!(concat!("[\x1b[32m INFO\x1b[37m] ", $fmt, "\n") $(, $($arg)+)?);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
+    ($($arg:tt)*) => {{
+        let __payload = alloc::format!($($arg)*);
+        let __line = alloc::format!("[\x1b[32m INFO\x1b[37m] {}\n", __payload);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
 }
 
 #[macro_export]
 macro_rules! warn {
-    ($($arg:tt)*) => {
-        $crate::print::_print(core::format_args!("[\x1b[33m WARN\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
-    };
+    ($fmt:literal $(, $($arg:tt)+)?) => {{
+        extern crate alloc;
+        let __line = alloc::format!(concat!("[\x1b[33m WARN\x1b[37m] ", $fmt, "\n") $(, $($arg)+)?);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
+    ($($arg:tt)*) => {{
+        let __payload = alloc::format!($($arg)*);
+        let __line = alloc::format!("[\x1b[33m WARN\x1b[37m] {}\n", __payload);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
 }
 
 #[macro_export]
 macro_rules! error {
-    ($($arg:tt)*) => {
-        $crate::print::_print(core::format_args!("[\x1b[31mERROR\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
-    };
+    ($fmt:literal $(, $($arg:tt)+)?) => {{
+        extern crate alloc;
+        let __line = alloc::format!(concat!("[\x1b[31mERROR\x1b[37m] ", $fmt, "\n") $(, $($arg)+)?);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
+    ($($arg:tt)*) => {{
+        let __payload = alloc::format!($($arg)*);
+        let __line = alloc::format!("[\x1b[31mERROR\x1b[37m] {}\n", __payload);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
 }
 
 #[macro_export]
 macro_rules! debug {
-    ($($arg:tt)*) => {
-        $crate::print::_print(core::format_args!("[\x1b[34mDEBUG\x1b[37m] {}{}", core::format_args!($($arg)*), "\n"))
-    };
+    ($fmt:literal $(, $($arg:tt)+)?) => {{
+        extern crate alloc;
+        let __line = alloc::format!(concat!("[\x1b[34mDEBUG\x1b[37m] ", $fmt, "\n") $(, $($arg)+)?);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
+    ($($arg:tt)*) => {{
+        let __payload = alloc::format!($($arg)*);
+        let __line = alloc::format!("[\x1b[34mDEBUG\x1b[37m] {}\n", __payload);
+        $crate::print::_print(core::format_args!("{}", __line.as_str()));
+    }};
 }
