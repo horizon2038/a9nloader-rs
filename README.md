@@ -18,8 +18,8 @@ cargo build --release
 
 To run the bootloader in the QEMU emulator, you will need to provide two executable files: kernel.elf and init.elf.
 
-- 1. Place your `kernel.elf` and `init.elf` files in the `tools/` directory of the project.
-- 1. Run the following command:
+1. Place your `kernel.elf` and `init.elf` files in the `tools/` directory of the project.
+1. Run the following command:
 ```bash
 cargo run
 ```
