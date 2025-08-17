@@ -14,6 +14,10 @@ mkfs.fat -F 32 "${IMG_PATH}"
 mkdir -p "${ESP_DIR}/EFI/BOOT"
 cp -f "${EFI_PATH}" "${ESP_DIR}/EFI/BOOT/BOOTX64.EFI"
 
+mkdir -p "${ESP_DIR}/kernel"
+cp -f "${RUN_DIR}/kernel.elf" "${ESP_DIR}/kernel/kernel.elf"
+cp -f "${RUN_DIR}/init.elf" "${ESP_DIR}/kernel/init.elf"
+
 mcopy -i "${IMG_PATH}" -s "${ESP_DIR}"/* ::/
 
 rm -rf "${ESP_DIR}"

@@ -5,7 +5,9 @@
 mod screen;
 use screen::Screen;
 mod gui;
+mod loader;
 mod print;
+mod util;
 
 use uefi::prelude::*;
 
@@ -15,9 +17,10 @@ fn main() -> Status {
     gui_init();
 
     log_a9nloader_info();
-    info!("Loading Kernel...");
-    info!("Loading Init...");
-    info!("Jump to Kernel...");
+
+    loader::run().unwrap_or_else(|e| {
+        error!("Failed to run loader: {}", e);
+    });
 
     loop {}
 
@@ -72,7 +75,4 @@ fn log_a9nloader_info() {
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_AUTHORS"),
     );
-    warn!("This is a test warning message.");
-    error!("This is a test error message.");
-    debug!("This is a test debug message.");
 }

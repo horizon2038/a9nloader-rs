@@ -19,7 +19,7 @@ pub fn find_address_from_symbol_name(elf: &ElfFile, symbol_name: &str) -> BootRe
     // read the section headers (table)
     for section_header in elf.section_iter() {
         // search for symbol table section (.symtab)
-        if section_header.get_type().unwrap_or(ShType::Null) != ShType::SymTab {
+        if section_header.get_type() != Ok(ShType::SymTab) {
             continue;
         }
 
