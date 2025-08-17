@@ -45,8 +45,8 @@ const A9NLOADER_LOGO: &str = r#"
 /_/   \_\/_/|_| \_|_____\___/ \__,_|\__,_|\___|_|   
 "#;
 
-const A9N_SPLASH_BMP: &[u8] = include_bytes!("../a9n-project.bmp");
-const A9N_LOADER_SPLASH_BMP: &[u8] = include_bytes!("../a9n-loader.bmp");
+const A9N_SPLASH_BMP: &[u8] = include_bytes!("../resources/a9n-project.bmp");
+const A9N_LOADER_SPLASH_BMP: &[u8] = include_bytes!("../resources/a9n-loader.bmp");
 
 fn gui_init() {
     gui::draw_bmp(A9N_LOADER_SPLASH_BMP, 0, 0);
