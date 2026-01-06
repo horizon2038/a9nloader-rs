@@ -44,3 +44,24 @@ pub fn info_file_metadata(
             Ok(())
         })
 }
+
+pub fn info_file_in_directory(
+    directory_path: &uefi::fs::Path,
+    file_system: &mut FileSystem,
+) -> BootResult<()> {
+    file_system
+        .read_dir(&directory_path)
+        .map_err(|_| crate::util::uefi_error(uefi::Status::NOT_FOUND))
+        .and_then(|iter| {
+            iter.filter_map(|entry| entry.ok()).for_each(|file_info| {
+                info!(
+                    "File: {}/{}, Size: {} bytes, created: {}",
+                    directory_path.to_cstr16(),
+                    file_info.file_name(),
+                    file_info.file_size(),
+                    file_info.create_time()
+                );
+            });
+            Ok(())
+        })
+}

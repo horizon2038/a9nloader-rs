@@ -10,16 +10,34 @@ pub use file_system::*;
 mod memory;
 pub use memory::*;
 
+mod boot_info;
+pub use boot_info::*;
+
 use crate::util::*;
 use crate::{debug, error, info, warn};
 
 const KERNEL_PATH: &str = r"\kernel\kernel.elf";
 const INIT_PATH: &str = r"\kernel\init.elf";
 
+static mut BOOT_INFO: BootInfo = BootInfo {
+    memory_info: MemoryInfo {
+        memory_map: core::ptr::null_mut(),
+        memory_map_count: 0,
+        memory_size: 0,
+    },
+    init_image_info: InitImageInfo {
+        loaded_address: 0,
+        init_image_pages: 0,
+        entry_point_virtual_address: 0,
+        init_info_virtual_address: 0,
+        init_ipc_buffer_virtual_address: 0,
+    },
+    arch_info: [0; 8],
+};
+
 pub fn run() -> BootResult<()> {
     info!("Starting load a kernel...");
     let mut kernel_entry_point: usize = 0;
-    let mut init_entry_point: usize = 0;
 
     read_entire_file(KERNEL_PATH).and_then(|kernel_bytes| {
         parse_elf(&kernel_bytes)
@@ -36,18 +54,87 @@ pub fn run() -> BootResult<()> {
             .and_then(|init_bytes| {
                 parse_elf(&init_bytes)
                     .and_then(|init_elf| load_init_at_anywhere(&init_elf, &init_bytes))
-                    .map(|init_image_info| {
+                    .map(|fetched_init_image_info| {
                         info!(
                             "Init loaded successfully at entry point: 0x{:016x}",
-                            init_image_info.entry_point_virtual_address
+                            fetched_init_image_info.entry_point_virtual_address
                         );
                         info!(
                             "Init image: loaded at 0x{:016x}, pages: {}, entry point: 0x{:016x}",
-                            init_image_info.loaded_address,
-                            init_image_info.init_image_pages,
-                            init_image_info.entry_point_virtual_address
+                            fetched_init_image_info.loaded_address,
+                            fetched_init_image_info.init_image_pages,
+                            fetched_init_image_info.entry_point_virtual_address
                         );
+                        unsafe { BOOT_INFO.init_image_info = fetched_init_image_info };
                     })
             })
+            .and_then(|_| {
+                make_memory_info().and_then(|memory_info| {
+                    for i in 0..memory_info.memory_map_count as usize {
+                        let entry = unsafe { &*memory_info.memory_map.add(i) };
+                        info!(
+                            "Memory Map Entry {}: Address: 0x{:016x}, Pages: {}, Type: {:?}",
+                            i, entry.physical_address_start, entry.page_count, entry.memory_type
+                        );
+                    }
+                    unsafe { BOOT_INFO.memory_info = memory_info };
+                    Ok(())
+                })
+            })
+            .and_then(|_| {
+                // arch_info[0]: rsdp
+                unsafe {
+                    BOOT_INFO.arch_info[0] = find_rsdp_address();
+                    // BOOT_INFO.arch_info[1] = find_frame_buffer_address();
+                    info!("Loading finished. Preparing to jump to kernel...");
+                    let _ = uefi::boot::exit_boot_services(Some(
+                        uefi::mem::memory_map::MemoryType::LOADER_DATA,
+                    ));
+
+                    // jump to kernel with BOOT_INFO address
+                    // sysv abi
+                    let kernel_entry: extern "sysv64" fn(*const BootInfo) -> ! =
+                        core::mem::transmute(kernel_entry_point);
+
+                    #[allow(static_mut_refs)]
+                    kernel_entry(&BOOT_INFO as *const BootInfo);
+                }
+                Ok(())
+            })
+    })
+}
+
+fn find_rsdp_address() -> usize {
+    uefi::system::with_config_table(|table| {
+        let mut rsdp_acpi1: usize = 0;
+        let mut rsdp_acpi2: usize = 0;
+
+        for entry in table.iter() {
+            if entry.guid == uefi::table::cfg::ACPI2_GUID {
+                rsdp_acpi2 = entry.address as usize;
+            } else if entry.guid == uefi::table::cfg::ACPI_GUID {
+                rsdp_acpi1 = entry.address as usize;
+            }
+        }
+
+        let rsdp = if rsdp_acpi2 != 0 {
+            rsdp_acpi2
+        } else {
+            rsdp_acpi1
+        };
+
+        if rsdp != 0 {
+            info!(
+                "Chosen RSDP: 0x{:016x} ({})",
+                rsdp,
+                if rsdp == rsdp_acpi2 {
+                    "ACPI 2.0+"
+                } else {
+                    "ACPI 1.0"
+                }
+            );
+        }
+
+        rsdp
     })
 }

@@ -70,6 +70,25 @@ impl VgaScreen {
             })
     }
 
+    pub fn present_rect(
+        &mut self,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> Result<(), uefi::Error> {
+        self.gop
+            .blt(uefi::proto::console::gop::BltOp::BufferToVideo {
+                buffer: &self.back_buffer,
+                src: uefi::proto::console::gop::BltRegion::SubRectangle {
+                    coords: (x, y),
+                    px_stride: self.screen_width,
+                },
+                dest: (x, y),
+                dims: (width, height),
+            })
+    }
+
     pub fn present_pixel(&mut self, x: usize, y: usize) -> Result<(), uefi::Error> {
         self.gop
             .blt(uefi::proto::console::gop::BltOp::BufferToVideo {
@@ -103,7 +122,6 @@ impl VgaScreen {
     }
 }
 
-// TODO: implement double buffering
 impl screen::Screen for VgaScreen {
     fn pixel_at(&mut self, x: usize, y: usize) -> screen::Color {
         let pixel = self.back_buffer[self.index(x, y)];
@@ -156,6 +174,10 @@ impl screen::Screen for VgaScreen {
     }
 
     fn draw_pixel(&mut self, x: usize, y: usize, color: screen::Color) {
+        if x >= self.screen_width || y >= self.screen_height {
+            return; // Out of bounds, do nothing
+        }
+
         let index = self.index(x, y);
         self.back_buffer[index] = Self::to_blt(color);
         // let _ = self.present_pixel(x, y);
@@ -163,6 +185,10 @@ impl screen::Screen for VgaScreen {
 
     fn flush(&mut self, x: usize, y: usize) {
         let _ = self.present_pixel(x, y);
+    }
+
+    fn flush_rect(&mut self, x: usize, y: usize, width: usize, height: usize) {
+        let _ = self.present_rect(x, y, width, height);
     }
 
     fn flush_all(&mut self) {

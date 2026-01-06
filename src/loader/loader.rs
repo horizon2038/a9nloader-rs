@@ -12,6 +12,8 @@ use xmas_elf::{
 
 pub const AP_TRAMPOLINE_BASE: usize = 0x6000;
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct InitImageInfo {
     pub loaded_address: usize,
     pub init_image_pages: usize,
@@ -46,7 +48,7 @@ pub fn load_kernel_at_physical_address(
 
 #[inline]
 fn filter_program_header_load(program_header: &ProgramHeader) -> bool {
-    program_header.get_type() != Ok(ProgramHeaderType::Load)
+    program_header.get_type() == Ok(ProgramHeaderType::Load)
 }
 
 fn allocate_segment_at_exact_physical_address(program_header: &ProgramHeader) -> BootResult<()> {

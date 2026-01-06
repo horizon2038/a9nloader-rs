@@ -33,8 +33,6 @@ fn uefi_init() {
         let _ = uefi::proto::console::text::Output::clear(stdout);
         let _ = uefi::proto::console::text::Output::reset(stdout, true);
     });
-
-    screen::init_screen();
 }
 
 const A9NLOADER_LOGO: &str = r#"
@@ -49,21 +47,25 @@ const A9N_SPLASH_BMP: &[u8] = include_bytes!("../resources/a9n-project.bmp");
 const A9N_LOADER_SPLASH_BMP: &[u8] = include_bytes!("../resources/a9n-loader.bmp");
 
 fn gui_init() {
+    screen::init_screen();
     gui::draw_bmp(A9N_LOADER_SPLASH_BMP, 0, 0);
 
     let screen = screen::current_screen();
     let width = screen.width();
     let height = screen.height();
-    // let header_dimensions = gui::get_bmp_dimensions(A9N_SPLASH_BMP).unwrap_or((0, 0));
 
     for y in 80..height {
         for x in 0..width {
-            screen.draw_pixel(x, y, screen::Color {
-                red: 0x14,
-                green: 0x14,
-                blue: 0x14,
-                alpha: 0xff,
-            });
+            screen.draw_pixel(
+                x,
+                y,
+                screen::Color {
+                    red: 0x14,
+                    green: 0x14,
+                    blue: 0x14,
+                    alpha: 0xff,
+                },
+            );
         }
     }
 }
