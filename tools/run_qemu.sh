@@ -23,7 +23,7 @@ mcopy -i "${IMG_PATH}" -s "${ESP_DIR}"/* ::/
 rm -rf "${ESP_DIR}"
 
 exec qemu-system-x86_64 \
-  -m 512 -cpu max -net none -serial stdio \
+  -m 512 -cpu max -net none -serial mon:stdio \
   -drive if=pflash,format=raw,readonly=on,file="${RUN_DIR}/OVMF_CODE.fd" \
   -drive if=pflash,format=raw,file="${RUN_DIR}/OVMF_VARS.fd" \
   -drive format=raw,file="${IMG_PATH}"
