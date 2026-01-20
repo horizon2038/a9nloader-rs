@@ -13,8 +13,8 @@ pub use memory::*;
 mod boot_info;
 pub use boot_info::*;
 
+use crate::info;
 use crate::util::*;
-use crate::{debug, error, info, warn};
 
 const KERNEL_PATH: &str = r"\kernel\kernel.elf";
 const INIT_PATH: &str = r"\kernel\init.elf";

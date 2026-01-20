@@ -1,9 +1,7 @@
 extern crate alloc;
-use alloc::vec;
 
-use uefi::boot::{MemoryDescriptor, MemoryType};
+use uefi::boot::MemoryType;
 use uefi::mem::memory_map::MemoryMap;
-use uefi::{boot, system};
 
 use crate::util::*;
 

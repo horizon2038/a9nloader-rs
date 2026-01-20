@@ -1,4 +1,4 @@
-use crate::{debug, error, info, warn};
+use crate::{debug, error, info};
 
 use crate::util::BootResult;
 use crate::util::uefi_error;
@@ -6,7 +6,7 @@ use crate::util::uefi_error;
 use uefi::Status;
 use xmas_elf::ElfFile;
 use xmas_elf::sections::{SectionData, SectionHeader, ShType};
-use xmas_elf::symbol_table::{self, Entry};
+use xmas_elf::symbol_table::Entry;
 
 pub fn parse_elf(bytes: &[u8]) -> BootResult<ElfFile<'_>> {
     xmas_elf::ElfFile::new(bytes).map_err(|e| {

@@ -1,6 +1,5 @@
 use crate::screen;
 
-use core::slice;
 use uefi::boot;
 use uefi::proto::console::gop::BltPixel;
 
@@ -234,12 +233,17 @@ impl DrawTarget for VgaScreen {
             let x = point_x as usize;
             let y = point_y as usize;
 
-            <Self as screen::Screen>::draw_pixel(self, x, y, screen::Color {
-                red: color.r(),
-                green: color.g(),
-                blue: color.b(),
-                alpha: 0xff, // Assuming full opacity
-            });
+            <Self as screen::Screen>::draw_pixel(
+                self,
+                x,
+                y,
+                screen::Color {
+                    red: color.r(),
+                    green: color.g(),
+                    blue: color.b(),
+                    alpha: 0xff, // Assuming full opacity
+                },
+            );
         }
         // <Self as screen::Screen>::flush_all(self);
 
