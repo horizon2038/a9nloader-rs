@@ -8,7 +8,7 @@ pub struct Bmp<'a> {
 }
 
 impl Bmp<'_> {
-    pub fn new(raw_bmp: &[u8]) -> Option<Bmp> {
+    pub fn new(raw_bmp: &[u8]) -> Option<Bmp<'_>> {
         if raw_bmp.len() < 54 {
             return None; // Not enough data for BMP header
         }
