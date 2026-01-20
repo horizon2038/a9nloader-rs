@@ -11,11 +11,9 @@ use embedded_graphics::{
     pixelcolor::Rgb888,
     prelude::*,
     primitives::Rectangle,
-    text::renderer::CharacterStyle,
 };
 use embedded_text::{
     TextBox,
-    alignment::HorizontalAlignment,
     plugin::ansi::Ansi,
     style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder},
 };
@@ -28,7 +26,12 @@ struct VirtualConsole<'a> {
 }
 
 const CONSOLE_WIDTH_OFFSET: i32 = 10;
-const CONSOLE_HEIGHT_OFFSET: i32 = 80;
+
+fn calculate_console_height_offset() -> i32 {
+    let (_w, h) =
+        crate::gui::get_bmp_dimensions(crate::gui::A9N_LOADER_SPLASH_BMP).unwrap_or((0, 0));
+    h as i32 + 10
+}
 
 impl core::fmt::Write for VirtualConsole<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
@@ -46,7 +49,10 @@ impl core::fmt::Write for VirtualConsole<'_> {
                         // clear lines
 
                         // reset cursor position
-                        self.cursor.y = CONSOLE_HEIGHT_OFFSET;
+                        self.cursor.y = calculate_console_height_offset();
+
+                        // redraw splash
+                        crate::gui::draw_bmp(crate::gui::A9N_LOADER_SPLASH_BMP, 0, 0);
                     }
 
                     if !line.is_empty() {
@@ -59,7 +65,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
                             ),
                         );
 
-                        let mut textbox = TextBox::with_textbox_style(
+                        let textbox = TextBox::with_textbox_style(
                             line,
                             bounds,
                             self.character_style,
@@ -107,7 +113,7 @@ pub fn _print(args: core::fmt::Arguments) {
             VIRTUAL_CONSOLE = Some(VirtualConsole {
                 textbox_style,
                 character_style,
-                cursor: Point::new(CONSOLE_WIDTH_OFFSET, CONSOLE_HEIGHT_OFFSET),
+                cursor: Point::new(CONSOLE_WIDTH_OFFSET, calculate_console_height_offset()),
                 line_buffer,
             });
         }

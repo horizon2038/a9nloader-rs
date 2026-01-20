@@ -74,12 +74,16 @@ impl Bmp<'_> {
                 } else {
                     0xff // Default alpha for 24-bit BMP
                 };
-                Some((x, y, screen::Color {
-                    red,
-                    green,
-                    blue,
-                    alpha,
-                }))
+                Some((
+                    x,
+                    y,
+                    screen::Color {
+                        red,
+                        green,
+                        blue,
+                        alpha,
+                    },
+                ))
             })
     }
 }
@@ -118,17 +122,20 @@ pub fn draw_bmp(splash: &[u8], start_x: usize, start_y: usize) {
             let green = pixel_data[offset + 1];
             let red = pixel_data[offset + 2];
 
-            screen.draw_pixel(start_x + x, start_y + y, screen::Color {
-                red,
-                green,
-                blue,
-                alpha: 0xff,
-            });
+            screen.draw_pixel(
+                start_x + x,
+                start_y + y,
+                screen::Color {
+                    red,
+                    green,
+                    blue,
+                    alpha: 0xff,
+                },
+            );
         }
     }
     screen.flush_all();
 }
-
 pub fn draw_bmp_to_screen<Screen>(
     bmp: &Bmp,
     screen: &mut Screen,
@@ -148,7 +155,7 @@ pub fn draw_bmp_to_screen<Screen>(
     }
 }
 
-fn get_bmp_dimensions(header: &[u8]) -> Option<(usize, usize)> {
+pub fn get_bmp_dimensions(header: &[u8]) -> Option<(usize, usize)> {
     if header.len() < 18 {
         return None; // Not enough data for dimensions
     }
