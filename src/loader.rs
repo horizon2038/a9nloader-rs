@@ -99,6 +99,7 @@ pub fn run() -> BootResult<()> {
                     #[allow(static_mut_refs)]
                     kernel_entry(&BOOT_INFO as *const BootInfo);
                 }
+                #[allow(unreachable_code)]
                 Ok(())
             })
     })
