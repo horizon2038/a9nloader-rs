@@ -1,12 +1,12 @@
 use crate::{debug, error, info};
 
-use crate::util::BootResult;
 use crate::util::uefi_error;
+use crate::util::BootResult;
 
 use uefi::Status;
-use xmas_elf::ElfFile;
 use xmas_elf::sections::{SectionData, SectionHeader, ShType};
 use xmas_elf::symbol_table::Entry;
+use xmas_elf::ElfFile;
 
 pub fn parse_elf(bytes: &[u8]) -> BootResult<ElfFile<'_>> {
     xmas_elf::ElfFile::new(bytes).map_err(|e| {
@@ -17,8 +17,10 @@ pub fn parse_elf(bytes: &[u8]) -> BootResult<ElfFile<'_>> {
 
 pub fn find_address_from_symbol_name(elf: &ElfFile, symbol_name: &str) -> BootResult<usize> {
     // read the section headers (table)
+    debug!("Searching for symbol '{}' in ELF file", symbol_name);
     for section_header in elf.section_iter() {
         // search for symbol table section (.symtab)
+        debug!("Checking section header: {:?}", section_header);
         if section_header.get_type() != Ok(ShType::SymTab) {
             continue;
         }
@@ -49,6 +51,7 @@ pub fn find_address_from_symbol_name(elf: &ElfFile, symbol_name: &str) -> BootRe
         }
     }
 
+    debug!("Symbol '{}' not found in any symbol table", symbol_name);
     error!("Failed to read symbol table");
     Err(uefi_error(Status::NOT_FOUND))
 }
@@ -83,6 +86,7 @@ fn lookup_address_in_symbol_table(
     return match section_header.get_data(elf) {
         Ok(SectionData::SymbolTable64(entries)) => {
             for entry in entries {
+                // info!("Checking symbol table entry: {:?}", entry);
                 if compare_from_index(string_table, entry.name() as usize, symbol_name) {
                     // found the symbol
                     let address = entry.value() as usize;

@@ -7,15 +7,15 @@ use alloc::vec;
 
 use embedded_graphics;
 use embedded_graphics::{
-    mono_font::{MonoTextStyle, ascii::*},
+    mono_font::{ascii::*, MonoTextStyle},
     pixelcolor::Rgb888,
     prelude::*,
     primitives::Rectangle,
 };
 use embedded_text::{
-    TextBox,
     plugin::ansi::Ansi,
     style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder},
+    TextBox,
 };
 
 struct VirtualConsole<'a> {
@@ -46,7 +46,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
                     // scroll
                     if self.cursor.y + line_height > screen_height {
                         screen.clear(Rgb888::BLACK).ok(); // エラーは無視
-                        // clear lines
+                                                          // clear lines
 
                         // reset cursor position
                         self.cursor.y = calculate_console_height_offset();
@@ -199,6 +199,8 @@ macro_rules! error {
     }};
 }
 
+// debug build only
+#[cfg(debug_assertions)]
 #[macro_export]
 macro_rules! debug {
     ($fmt:literal $(, $($arg:tt)+)?) => {{
@@ -211,4 +213,11 @@ macro_rules! debug {
         let __line = alloc::format!("[\x1b[34mDEBUG\x1b[37m] {}\n", __payload);
         $crate::print::_print(core::format_args!("{}", __line.as_str()));
     }};
+}
+
+#[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! debug {
+    ($fmt:literal $(, $($arg:tt)+)?) => {{}};
+    ($($arg:tt)*) => {{}};
 }

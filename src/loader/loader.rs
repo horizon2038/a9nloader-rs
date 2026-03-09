@@ -6,8 +6,8 @@ use crate::loader::elf;
 use crate::util::*;
 use uefi::boot::{self, MemoryType};
 use xmas_elf::{
-    ElfFile,
     program::{ProgramHeader, Type as ProgramHeaderType},
+    ElfFile,
 };
 
 pub const AP_TRAMPOLINE_BASE: usize = 0x6000;
@@ -83,6 +83,12 @@ fn copy_segment_to_physical_address(
     image: &[u8],
     physical_offset: usize,
 ) -> BootResult<()> {
+    debug!("Copying segment: {:?}", program_header);
+    debug!(
+        "  file size: 0x{:x}, memory size: 0x{:x}",
+        program_header.file_size(),
+        program_header.mem_size()
+    );
     if !filter_program_header_load(program_header) {
         return Ok(());
     }
@@ -93,7 +99,8 @@ fn copy_segment_to_physical_address(
 
     let mut physical_address = program_header.physical_addr() as usize + physical_offset;
     if file_size == 0 {
-        physical_address &= !HIGHER_HALF_MASK; // Ensure physical address is in lower half
+        debug!("  Skipping segment with zero file size");
+        // physical_address &= !HIGHER_HALF_MASK; // Ensure physical address is in lower half
     }
 
     if file_size > 0 {
@@ -121,56 +128,83 @@ pub fn load_init_at_anywhere(init_elf: &ElfFile, init_bytes: &[u8]) -> BootResul
     let total_bytes = span_end - span_start;
     let total_pages = bytes_to_pages_rounded(total_bytes);
 
+    let mut entry_virtual_address = 0usize;
+    let mut init_info_virtual_address = 0usize;
+    let mut init_ipc_buffer_virtual_address = 0usize;
+
+    debug!(
+        "Init load span: [0x{:016x}, 0x{:016x}], total bytes: 0x{:x}, total pages: 0x{:x}",
+        span_start, span_end, total_bytes, total_pages
+    );
+
     let mut base = span_start;
+    let mut load_bias = 0usize;
+
     uefi::boot::allocate_pages(
         uefi::boot::AllocateType::AnyPages,
         MemoryType::RESERVED,
         total_pages,
     )
     .map(|address| {
-        let address_raw: usize = address.as_ptr().addr();
-        base = address_raw;
-        address_raw
+        base = address.as_ptr().addr();
+        load_bias = base - span_start;
+
+        debug!(
+            "Allocated pages for init at physical address: 0x{:016x}, load bias: 0x{:x}",
+            base, load_bias
+        );
     })
     .map_err(|e| {
         error!("Failed to allocate pages for init: {}", e);
         e
-    })
-    .and_then(|_| {
-        info!(
-            "Init base address: 0x{:016x}, total pages: 0x{:x}",
-            base, total_pages
-        );
-        init_elf
-            .program_iter()
-            .filter(filter_program_header_load)
-            .try_for_each(|program_header| {
-                copy_segment_to_physical_address(&program_header, init_bytes, base)
-            })
-    })
-    .and_then(|_| {
-        let entry_virtual_address = init_elf.header.pt2.entry_point() as usize;
-        let init_info_virtual_address =
-            elf::find_address_from_symbol_name(init_elf, "__init_info_start")?;
-        let init_ipc_buffer_virtual_address =
-            elf::find_address_from_symbol_name(init_elf, "__init_ipc_buffer_start")?;
-        info!("Init entry point: 0x{:016x}", entry_virtual_address);
-        info!(
-            "Init info virtual address: 0x{:016x}",
-            init_info_virtual_address
-        );
-        info!(
-            "Init IPC buffer virtual address: 0x{:016x}",
-            init_ipc_buffer_virtual_address
-        );
+    })?;
 
-        Ok(InitImageInfo {
-            loaded_address: base,
-            init_image_pages: total_pages,
-            entry_point_virtual_address: entry_virtual_address,
-            init_info_virtual_address,
-            init_ipc_buffer_virtual_address,
-        })
+    // configure variables for init image info
+    entry_virtual_address = init_elf.header.pt2.entry_point() as usize;
+    init_info_virtual_address = elf::find_address_from_symbol_name(init_elf, "__init_info_start")?;
+    init_ipc_buffer_virtual_address =
+        elf::find_address_from_symbol_name(init_elf, "__init_ipc_buffer_start")?;
+
+    info!(
+        "Init entry point virtual address: 0x{:016x}",
+        entry_virtual_address
+    );
+    info!(
+        "Init info virtual address: 0x{:016x}",
+        init_info_virtual_address
+    );
+    info!(
+        "Init IPC buffer virtual address: 0x{:016x}",
+        init_ipc_buffer_virtual_address
+    );
+
+    info!(
+        "Init allocation base: 0x{:016x}, load bias: 0x{:x}, total pages: 0x{:x}",
+        base, load_bias, total_pages
+    );
+
+    let allocated_bytes = total_pages * EFI_PAGE_SIZE;
+
+    init_elf
+        .program_iter()
+        .filter(filter_program_header_load)
+        .try_for_each(|program_header| {
+            debug!("Loading program header: {:?}", program_header);
+            copy_segment_to_physical_address_checked(
+                &program_header,
+                init_bytes,
+                load_bias,
+                span_start,
+                allocated_bytes,
+            )
+        })?;
+
+    Ok(InitImageInfo {
+        loaded_address: load_bias,
+        init_image_pages: total_pages,
+        entry_point_virtual_address: entry_virtual_address,
+        init_info_virtual_address,
+        init_ipc_buffer_virtual_address,
     })
 }
 
@@ -195,6 +229,79 @@ fn calculate_load_span_physical_address(elf: &ElfFile) -> (usize, usize) {
     }
 
     (start, end)
+}
+
+fn copy_segment_to_physical_address_checked(
+    program_header: &ProgramHeader,
+    image: &[u8],
+    load_bias: usize,
+    span_start: usize,
+    allocated_bytes: usize,
+) -> BootResult<()> {
+    let file_size = program_header.file_size() as usize;
+    let memory_size = program_header.mem_size() as usize;
+    let file_offset = program_header.offset() as usize;
+    let paddr = program_header.physical_addr() as usize;
+
+    if memory_size == 0 {
+        return Ok(());
+    }
+
+    if paddr < span_start {
+        error!(
+            "Segment paddr is below span_start: paddr=0x{:x}, span_start=0x{:x}",
+            paddr, span_start
+        );
+        return Err(uefi_error(uefi::Status::LOAD_ERROR));
+    }
+
+    let segment_offset = paddr - span_start;
+
+    if segment_offset.checked_add(memory_size).is_none() {
+        return Err(uefi_error(uefi::Status::LOAD_ERROR));
+    }
+
+    let segment_end = segment_offset + memory_size;
+
+    if segment_end > allocated_bytes {
+        error!(
+            "Segment exceeds allocated bytes: segment_end=0x{:x} > allocated=0x{:x} (paddr=0x{:x}, memsz=0x{:x})",
+            segment_end,
+            allocated_bytes,
+            paddr,
+            memory_size
+        );
+        return Err(uefi_error(uefi::Status::LOAD_ERROR));
+    }
+
+    let dest = load_bias + paddr; // == allocation_base + segment_offset
+
+    if file_size > 0 {
+        if file_offset.checked_add(file_size).is_none() || file_offset + file_size > image.len() {
+            error!(
+                "Segment file range out of bounds: off=0x{:x}, filesz=0x{:x}, image_len=0x{:x}",
+                file_offset,
+                file_size,
+                image.len()
+            );
+            return Err(uefi_error(uefi::Status::LOAD_ERROR));
+        }
+
+        let source = &image[file_offset..file_offset + file_size];
+
+        unsafe {
+            copy_nonoverlapping(source.as_ptr(), dest as *mut u8, file_size);
+        }
+    }
+
+    if memory_size > file_size {
+        let bss_length = memory_size - file_size;
+        unsafe {
+            write_bytes((dest + file_size) as *mut u8, 0, bss_length);
+        }
+    }
+
+    Ok(())
 }
 
 pub fn reserve_ap_trampoline() -> BootResult<()> {

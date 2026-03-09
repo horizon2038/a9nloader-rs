@@ -53,9 +53,14 @@ pub fn run() -> BootResult<()> {
                             fetched_init_image_info.entry_point_virtual_address
                         );
                         unsafe { BOOT_INFO.init_image_info = fetched_init_image_info };
+
+                        core::mem::forget(init_bytes);
+
+                        info!("Init image info prepared.");
                     })
             })
             .and_then(|_| {
+                info!("Preparing memory info...");
                 make_memory_info().and_then(|memory_info| {
                     for i in 0..memory_info.memory_map_count as usize {
                         let entry = unsafe { &*memory_info.memory_map.add(i) };
