@@ -2,6 +2,9 @@ use crate::screen;
 
 use uefi::boot;
 use uefi::proto::console::gop::BltPixel;
+use uefi::proto::console::gop::PixelFormat;
+
+use crate::loader;
 
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::{OriginDimensions, Point, Size};
@@ -23,13 +26,85 @@ impl VgaScreen {
     pub fn new() -> Self {
         let gop_handle =
             boot::get_handle_for_protocol::<uefi::proto::console::gop::GraphicsOutput>().unwrap();
-        let gop =
+        let mut gop =
             boot::open_protocol_exclusive::<uefi::proto::console::gop::GraphicsOutput>(gop_handle)
                 .unwrap();
 
-        let (width, height) = gop.current_mode_info().resolution();
+        let current_mode = gop.current_mode_info();
+        let (width, height) = current_mode.resolution();
         let mut back_buffer = vec::Vec::new();
         back_buffer.resize(width * height, BltPixel::new(0, 0, 0));
+
+        // configure the framebuffer information to boot_info for the kernel->user
+        let (r, g, b) = match current_mode.pixel_format() {
+            PixelFormat::Rgb => (
+                loader::ColorField {
+                    position: 0,
+                    size: 8,
+                },
+                loader::ColorField {
+                    position: 8,
+                    size: 8,
+                },
+                loader::ColorField {
+                    position: 16,
+                    size: 8,
+                },
+            ),
+            PixelFormat::Bgr => (
+                loader::ColorField {
+                    position: 16,
+                    size: 8,
+                },
+                loader::ColorField {
+                    position: 8,
+                    size: 8,
+                },
+                loader::ColorField {
+                    position: 0,
+                    size: 8,
+                },
+            ),
+            PixelFormat::Bitmask => {
+                let bit_mask = current_mode
+                    .pixel_bitmask()
+                    .expect("Failed to get pixel bitmask");
+                let to_color_field = |mask: u32| -> loader::ColorField {
+                    let position = mask.trailing_zeros() as u8;
+                    let size = (mask.count_ones()) as u8;
+                    loader::ColorField { position, size }
+                };
+                let r = to_color_field(bit_mask.red);
+                let g = to_color_field(bit_mask.green);
+                let b = to_color_field(bit_mask.blue);
+
+                (r, g, b)
+            }
+            PixelFormat::BltOnly => {
+                panic!("BltOnly pixel format is not supported for direct framebuffer access");
+            }
+        };
+
+        let frame_buffer_info = loader::FramebufferInfo {
+            address: gop.frame_buffer().as_mut_ptr() as usize,
+            width: width as u32,
+            height: height as u32,
+            stride: current_mode.stride() as u32,
+            bits_per_pixel: 32, // UEFI GOP typically uses 32 bits per pixel
+            red: r,
+            green: g,
+            blue: b,
+            alpha: loader::ColorField {
+                position: 24,
+                size: 8,
+            },
+        };
+
+        let serialized_info = frame_buffer_info.serialize();
+
+        unsafe {
+            loader::BOOT_INFO.arch_info[1..14].copy_from_slice(&serialized_info);
+        }
 
         VgaScreen {
             screen_width: width as usize,

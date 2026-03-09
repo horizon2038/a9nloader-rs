@@ -13,27 +13,14 @@ pub use memory::*;
 mod boot_info;
 pub use boot_info::*;
 
+mod frame_buffer_info;
+pub use frame_buffer_info::*;
+
 use crate::info;
 use crate::util::*;
 
 const KERNEL_PATH: &str = r"\kernel\kernel.elf";
 const INIT_PATH: &str = r"\kernel\init.elf";
-
-static mut BOOT_INFO: BootInfo = BootInfo {
-    memory_info: MemoryInfo {
-        memory_map: core::ptr::null_mut(),
-        memory_map_count: 0,
-        memory_size: 0,
-    },
-    init_image_info: InitImageInfo {
-        loaded_address: 0,
-        init_image_pages: 0,
-        entry_point_virtual_address: 0,
-        init_info_virtual_address: 0,
-        init_ipc_buffer_virtual_address: 0,
-    },
-    arch_info: [0; 8],
-};
 
 pub fn run() -> BootResult<()> {
     info!("Starting load a kernel...");
@@ -85,7 +72,6 @@ pub fn run() -> BootResult<()> {
                 // arch_info[0]: rsdp
                 unsafe {
                     BOOT_INFO.arch_info[0] = find_rsdp_address();
-                    // BOOT_INFO.arch_info[1] = find_frame_buffer_address();
                     info!("Loading finished. Preparing to jump to kernel...");
                     let _ = uefi::boot::exit_boot_services(Some(
                         uefi::mem::memory_map::MemoryType::LOADER_DATA,
