@@ -1,21 +1,19 @@
 use crate::screen;
 use core::fmt::Write;
-use uefi;
 
 extern crate alloc;
 use alloc::vec;
 
-use embedded_graphics;
 use embedded_graphics::{
-    mono_font::{ascii::*, MonoTextStyle},
+    mono_font::{MonoTextStyle, ascii::*},
     pixelcolor::Rgb888,
     prelude::*,
     primitives::Rectangle,
 };
 use embedded_text::{
+    TextBox,
     plugin::ansi::Ansi,
     style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder},
-    TextBox,
 };
 
 struct VirtualConsole<'a> {
@@ -37,7 +35,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         #[allow(static_mut_refs)]
         unsafe {
-            screen::SCREEN.as_mut().and_then(|screen| {
+            if let Some(screen) = screen::SCREEN.as_mut() {
                 let line_height = self.character_style.font.character_size.height as i32;
                 let screen_height = screen.bounding_box().size.height as i32;
 
@@ -46,7 +44,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
                     // scroll
                     if self.cursor.y + line_height > screen_height {
                         screen.clear(Rgb888::BLACK).ok(); // エラーは無視
-                                                          // clear lines
+                        // clear lines
 
                         // reset cursor position
                         self.cursor.y = calculate_console_height_offset();
@@ -61,7 +59,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
                             // Size::new(screen.size().width - self.cursor.x as u32, 0),
                             Size::new(
                                 screen.size().width,
-                                self.character_style.font.character_size.height as u32,
+                                self.character_style.font.character_size.height,
                             ),
                         );
 
@@ -78,9 +76,8 @@ impl core::fmt::Write for VirtualConsole<'_> {
 
                     self.cursor.y += line_height;
                 }
-                let _ = screen::Screen::flush_all(screen);
-                Some(())
-            });
+                screen::Screen::flush_all(screen);
+            }
         }
 
         Ok(())
@@ -107,8 +104,7 @@ pub fn _print(args: core::fmt::Arguments) {
                 .paragraph_spacing(0)
                 .build();
 
-            let mut line_buffer = vec::Vec::<u8>::new();
-            line_buffer.resize(512, 0);
+            let line_buffer = vec![0; 512];
 
             VIRTUAL_CONSOLE = Some(VirtualConsole {
                 textbox_style,
@@ -119,10 +115,8 @@ pub fn _print(args: core::fmt::Arguments) {
         }
 
         #[allow(static_mut_refs)]
-        let _ = VIRTUAL_CONSOLE.as_mut().and_then(|virtual_console| {
+        let _ = VIRTUAL_CONSOLE.as_mut().map(|virtual_console| {
             let _ = virtual_console.write_fmt(args);
-
-            Some(())
         });
 
         uefi::system::with_stdout(|stdout| {

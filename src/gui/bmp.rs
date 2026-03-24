@@ -179,7 +179,7 @@ pub fn get_bmp_dimensions(header: &[u8]) -> Option<(usize, usize)> {
         height_bytes[2],
         height_bytes[3],
     ]);
-    let height = height_raw.abs() as usize;
+    let height = height_raw.unsigned_abs() as usize;
 
     Some((width, height))
 }

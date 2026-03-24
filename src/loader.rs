@@ -61,7 +61,7 @@ pub fn run() -> BootResult<()> {
             })
             .and_then(|_| {
                 info!("Preparing memory info...");
-                make_memory_info().and_then(|memory_info| {
+                make_memory_info().map(|memory_info| {
                     for i in 0..memory_info.memory_map_count as usize {
                         let entry = unsafe { &*memory_info.memory_map.add(i) };
                         info!(
@@ -70,10 +70,10 @@ pub fn run() -> BootResult<()> {
                         );
                     }
                     unsafe { BOOT_INFO.memory_info = memory_info };
-                    Ok(())
+                    
                 })
             })
-            .and_then(|_| {
+            .map(|_| {
                 // arch_info[0]: rsdp
                 unsafe {
                     BOOT_INFO.arch_info[0] = find_rsdp_address();
@@ -91,7 +91,7 @@ pub fn run() -> BootResult<()> {
                     kernel_entry(&BOOT_INFO as *const BootInfo);
                 }
                 #[allow(unreachable_code)]
-                Ok(())
+                ()
             })
     })
 }

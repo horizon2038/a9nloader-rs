@@ -6,8 +6,8 @@ use crate::loader::elf;
 use crate::util::*;
 use uefi::boot::{self, MemoryType};
 use xmas_elf::{
-    program::{ProgramHeader, Type as ProgramHeaderType},
     ElfFile,
+    program::{ProgramHeader, Type as ProgramHeaderType},
 };
 
 pub const AP_TRAMPOLINE_BASE: usize = 0x6000;
@@ -39,10 +39,10 @@ pub fn load_kernel_at_physical_address(
                     copy_segment_to_physical_address(&program_header, kernel_bytes, 0)
                 })
         })
-        .and_then(|_| {
+        .map(|_| {
             let entry_point = kernel_elf.header.pt2.entry_point() as usize;
             info!("Kernel entry point: 0x{:016x}", entry_point);
-            Ok(entry_point)
+            entry_point
         })
 }
 
@@ -97,7 +97,7 @@ fn copy_segment_to_physical_address(
     let memory_size = program_header.mem_size() as usize;
     let file_offset = program_header.offset() as usize;
 
-    let mut physical_address = program_header.physical_addr() as usize + physical_offset;
+    let physical_address = program_header.physical_addr() as usize + physical_offset;
     if file_size == 0 {
         debug!("  Skipping segment with zero file size");
         // physical_address &= !HIGHER_HALF_MASK; // Ensure physical address is in lower half
@@ -128,10 +128,6 @@ pub fn load_init_at_anywhere(init_elf: &ElfFile, init_bytes: &[u8]) -> BootResul
     let total_bytes = span_end - span_start;
     let total_pages = bytes_to_pages_rounded(total_bytes);
 
-    let mut entry_virtual_address = 0usize;
-    let mut init_info_virtual_address = 0usize;
-    let mut init_ipc_buffer_virtual_address = 0usize;
-
     debug!(
         "Init load span: [0x{:016x}, 0x{:016x}], total bytes: 0x{:x}, total pages: 0x{:x}",
         span_start, span_end, total_bytes, total_pages
@@ -160,9 +156,10 @@ pub fn load_init_at_anywhere(init_elf: &ElfFile, init_bytes: &[u8]) -> BootResul
     })?;
 
     // configure variables for init image info
-    entry_virtual_address = init_elf.header.pt2.entry_point() as usize;
-    init_info_virtual_address = elf::find_address_from_symbol_name(init_elf, "__init_info_start")?;
-    init_ipc_buffer_virtual_address =
+    let entry_virtual_address = init_elf.header.pt2.entry_point() as usize;
+    let init_info_virtual_address =
+        elf::find_address_from_symbol_name(init_elf, "__init_info_start")?;
+    let init_ipc_buffer_virtual_address =
         elf::find_address_from_symbol_name(init_elf, "__init_ipc_buffer_start")?;
 
     info!(
@@ -266,10 +263,7 @@ fn copy_segment_to_physical_address_checked(
     if segment_end > allocated_bytes {
         error!(
             "Segment exceeds allocated bytes: segment_end=0x{:x} > allocated=0x{:x} (paddr=0x{:x}, memsz=0x{:x})",
-            segment_end,
-            allocated_bytes,
-            paddr,
-            memory_size
+            segment_end, allocated_bytes, paddr, memory_size
         );
         return Err(uefi_error(uefi::Status::LOAD_ERROR));
     }

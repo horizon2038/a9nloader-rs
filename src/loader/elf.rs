@@ -63,7 +63,7 @@ fn lookup_string_table<'a>(
     match section_header.link() {
         string_table_section_index => {
             let section_header_string = elf.section_header(string_table_section_index as u16);
-            return match section_header_string {
+            match section_header_string {
                 Ok(sh) => match sh.get_data(elf) {
                     Ok(SectionData::StrArray(string_table_raw)) => Some(string_table_raw),
                     _ => None,
@@ -72,9 +72,9 @@ fn lookup_string_table<'a>(
                     debug!("Failed to get string table section: {}", e);
                     None
                 }
-            };
+            }
         }
-    };
+    }
 }
 
 fn lookup_address_in_symbol_table(
@@ -83,7 +83,7 @@ fn lookup_address_in_symbol_table(
     string_table: &[u8],
     symbol_name: &str,
 ) -> Option<usize> {
-    return match section_header.get_data(elf) {
+    match section_header.get_data(elf) {
         Ok(SectionData::SymbolTable64(entries)) => {
             for entry in entries {
                 // info!("Checking symbol table entry: {:?}", entry);
@@ -98,7 +98,7 @@ fn lookup_address_in_symbol_table(
             None
         }
         _ => None,
-    };
+    }
 }
 
 fn compare_from_index(string_table: &[u8], index: usize, symbol_name: &str) -> bool {

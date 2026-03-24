@@ -27,7 +27,7 @@ fn main() -> Status {
 
 fn uefi_init() {
     let _ = uefi::helpers::init();
-    let _ = uefi::system::with_stdout(|stdout| {
+    uefi::system::with_stdout(|stdout| {
         let _ = uefi::proto::console::text::Output::clear(stdout);
         let _ = uefi::proto::console::text::Output::reset(stdout, true);
     });

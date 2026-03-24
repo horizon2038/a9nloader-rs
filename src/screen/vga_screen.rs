@@ -107,8 +107,8 @@ impl VgaScreen {
         }
 
         VgaScreen {
-            screen_width: width as usize,
-            screen_height: height as usize,
+            screen_width: width,
+            screen_height: height,
             gop,
             back_buffer,
         }

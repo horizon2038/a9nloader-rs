@@ -8,7 +8,7 @@ pub const HIGHER_HALF_MASK: usize = 0xFFFF_8000_0000_0000;
 
 #[inline(always)]
 pub fn bytes_to_pages(bytes: usize) -> usize {
-    (bytes + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE
+    bytes.div_ceil(EFI_PAGE_SIZE)
 }
 
 #[inline(always)]
