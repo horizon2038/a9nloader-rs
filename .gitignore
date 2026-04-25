@@ -8,3 +8,4 @@
 *.elf
 *.efi
 *.fd
+*.elf.*
