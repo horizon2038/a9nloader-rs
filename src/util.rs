@@ -21,3 +21,8 @@ pub fn bytes_to_pages_rounded(bytes: usize) -> usize {
 pub fn uefi_error(status: Status) -> Error {
     Error::from(status)
 }
+
+#[inline(always)]
+pub fn align_up(value: usize, align: usize) -> usize {
+    (value + align - 1) & !(align - 1)
+}
