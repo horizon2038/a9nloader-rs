@@ -206,7 +206,7 @@ pub fn load_init_at_anywhere(init_elf: &ElfFile, init_bytes: &[u8]) -> BootResul
 }
 
 fn calculate_load_span_physical_address(elf: &ElfFile) -> (usize, usize) {
-    let mut start = usize::MAX;
+    let start = 0usize;
     let mut end = 0usize;
 
     for program_header in elf.program_iter() {
@@ -217,15 +217,20 @@ fn calculate_load_span_physical_address(elf: &ElfFile) -> (usize, usize) {
         let physical_start = program_header.physical_addr() as usize;
         let memory_size = program_header.mem_size() as usize;
 
-        if physical_start < start {
-            start = physical_start;
+        if memory_size == 0 {
+            continue;
         }
-        if physical_start + memory_size > end {
-            end = physical_start + memory_size;
+
+        let physical_end = physical_start
+            .checked_add(memory_size)
+            .expect("ELF segment physical range overflow");
+
+        if physical_end > end {
+            end = physical_end;
         }
     }
 
-    (start, end)
+    (start, align_up(end, EFI_PAGE_SIZE))
 }
 
 fn copy_segment_to_physical_address_checked(
