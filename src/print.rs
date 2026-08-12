@@ -2,7 +2,6 @@ use crate::screen;
 use core::fmt::Write;
 
 extern crate alloc;
-use alloc::vec;
 
 use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::*},
@@ -12,7 +11,6 @@ use embedded_graphics::{
 };
 use embedded_text::{
     TextBox,
-    plugin::ansi::Ansi,
     style::{HeightMode, TextBoxStyle, TextBoxStyleBuilder},
 };
 
@@ -20,7 +18,6 @@ struct VirtualConsole<'a> {
     textbox_style: TextBoxStyle,
     character_style: MonoTextStyle<'a, Rgb888>,
     cursor: Point,
-    line_buffer: vec::Vec<u8>,
 }
 
 const CONSOLE_WIDTH_OFFSET: i32 = 10;
@@ -53,26 +50,7 @@ impl core::fmt::Write for VirtualConsole<'_> {
                         crate::gui::draw_bmp(crate::gui::A9N_LOADER_SPLASH_BMP, 0, 0);
                     }
 
-                    if !line.is_empty() {
-                        let bounds = Rectangle::new(
-                            self.cursor,
-                            // Size::new(screen.size().width - self.cursor.x as u32, 0),
-                            Size::new(
-                                screen.size().width,
-                                self.character_style.font.character_size.height,
-                            ),
-                        );
-
-                        let textbox = TextBox::with_textbox_style(
-                            line,
-                            bounds,
-                            self.character_style,
-                            self.textbox_style,
-                        )
-                        .add_plugin(Ansi::new());
-
-                        let _ = textbox.draw(screen);
-                    }
+                    self.draw_ansi_line(screen, line);
 
                     self.cursor.y += line_height;
                 }
@@ -81,6 +59,64 @@ impl core::fmt::Write for VirtualConsole<'_> {
         }
 
         Ok(())
+    }
+}
+
+impl VirtualConsole<'_> {
+    fn draw_ansi_line(&self, screen: &mut screen::VgaScreen, line: &str) {
+        let mut x = self.cursor.x;
+        let mut color = Rgb888::WHITE;
+        let mut remaining = line;
+
+        while !remaining.is_empty() {
+            let Some(escape) = remaining.find("\x1b[") else {
+                self.draw_text(screen, remaining, x, color);
+                break;
+            };
+
+            let plain = &remaining[..escape];
+            self.draw_text(screen, plain, x, color);
+            x += self.text_width(plain);
+
+            let sequence = &remaining[escape + 2..];
+            let Some(end) = sequence.find('m') else {
+                self.draw_text(screen, &remaining[escape..], x, color);
+                break;
+            };
+
+            color = match &sequence[..end] {
+                "0" | "37" | "39" => Rgb888::WHITE,
+                "31" => Rgb888::RED,
+                "32" => Rgb888::GREEN,
+                "33" => Rgb888::YELLOW,
+                "34" => Rgb888::BLUE,
+                _ => color,
+            };
+            remaining = &sequence[end + 1..];
+        }
+    }
+
+    fn draw_text(&self, screen: &mut screen::VgaScreen, text: &str, x: i32, color: Rgb888) {
+        if text.is_empty() {
+            return;
+        }
+
+        let bounds = Rectangle::new(
+            Point::new(x, self.cursor.y),
+            Size::new(
+                screen.size().width.saturating_sub(x.max(0) as u32),
+                self.character_style.font.character_size.height,
+            ),
+        );
+        let character_style = MonoTextStyle::new(self.character_style.font, color);
+        let textbox =
+            TextBox::with_textbox_style(text, bounds, character_style, self.textbox_style);
+        let _ = textbox.draw(screen);
+    }
+
+    fn text_width(&self, text: &str) -> i32 {
+        let character_width = self.character_style.font.character_size.width as i32;
+        text.chars().count() as i32 * character_width
     }
 }
 
@@ -104,13 +140,10 @@ pub fn _print(args: core::fmt::Arguments) {
                 .paragraph_spacing(0)
                 .build();
 
-            let line_buffer = vec![0; 512];
-
             VIRTUAL_CONSOLE = Some(VirtualConsole {
                 textbox_style,
                 character_style,
                 cursor: Point::new(CONSOLE_WIDTH_OFFSET, calculate_console_height_offset()),
-                line_buffer,
             });
         }
 
