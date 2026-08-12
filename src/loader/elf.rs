@@ -1,12 +1,12 @@
 use crate::{debug, error, info};
 
-use crate::util::BootResult;
 use crate::util::uefi_error;
+use crate::util::BootResult;
 
 use uefi::Status;
-use xmas_elf::ElfFile;
 use xmas_elf::sections::{SectionData, SectionHeader, ShType};
 use xmas_elf::symbol_table::Entry;
+use xmas_elf::ElfFile;
 
 pub fn parse_elf(bytes: &[u8]) -> BootResult<ElfFile<'_>> {
     xmas_elf::ElfFile::new(bytes).map_err(|e| {
@@ -68,8 +68,8 @@ fn lookup_string_table<'a>(
                     Ok(SectionData::StrArray(string_table_raw)) => Some(string_table_raw),
                     _ => None,
                 },
-                Err(e) => {
-                    debug!("Failed to get string table section: {}", e);
+                Err(_e) => {
+                    debug!("Failed to get string table section: {}", _e);
                     None
                 }
             }
