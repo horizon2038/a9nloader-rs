@@ -30,6 +30,17 @@ impl VgaScreen {
             boot::open_protocol_exclusive::<uefi::proto::console::gop::GraphicsOutput>(gop_handle)
                 .unwrap();
 
+        // Prefer exact FHD matches; otherwise, maximize the total pixel count.
+        let preferred_mode = gop.modes().max_by_key(|mode| {
+            let info = mode.info();
+            let (width, height) = info.resolution();
+
+            (width == 1920 && height == 1080, width * height)
+        });
+        if let Some(preferred_mode) = preferred_mode {
+            gop.set_mode(&preferred_mode).unwrap();
+        }
+
         let current_mode = gop.current_mode_info();
         let (width, height) = current_mode.resolution();
         let mut back_buffer = vec::Vec::new();
