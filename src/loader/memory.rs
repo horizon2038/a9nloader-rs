@@ -50,9 +50,9 @@ pub fn make_memory_info() -> BootResult<MemoryInfo> {
                     physical_address_start: entry.phys_start as usize,
                     page_count: entry.page_count as usize,
                     memory_type: match entry.ty {
-                        MemoryType::CONVENTIONAL
-                        | MemoryType::ACPI_RECLAIM
-                        | MemoryType::PERSISTENT_MEMORY => MemoryMapType::Free,
+                        MemoryType::CONVENTIONAL | MemoryType::PERSISTENT_MEMORY => {
+                            MemoryMapType::Free
+                        }
                         MemoryType::RESERVED
                         | MemoryType::BOOT_SERVICES_CODE
                         | MemoryType::BOOT_SERVICES_DATA
@@ -61,7 +61,11 @@ pub fn make_memory_info() -> BootResult<MemoryInfo> {
                         | MemoryType::UNUSABLE
                         | MemoryType::ACPI_NON_VOLATILE
                         | MemoryType::PAL_CODE => MemoryMapType::Reserved,
-                        MemoryType::LOADER_CODE
+                        // Keep firmware tables out of the normal RAM allocator.
+                        // User space may map these pages while walking ACPI;
+                        // they are not reclaimed during initial allocation.
+                        MemoryType::ACPI_RECLAIM
+                        | MemoryType::LOADER_CODE
                         | MemoryType::LOADER_DATA
                         | MemoryType::MMIO
                         | MemoryType::MMIO_PORT_SPACE
