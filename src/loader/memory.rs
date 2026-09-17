@@ -4,6 +4,7 @@ use uefi::mem::memory_map::{MemoryMap, MemoryMapMut};
 use crate::util::*;
 
 mod map;
+mod policy;
 pub use map::{MemoryMapEntry, MemoryMapType};
 
 #[repr(C)]
@@ -21,23 +22,25 @@ pub fn make_memory_info() -> BootResult<MemoryInfo> {
     // Firmware enumeration order is not necessarily physical address order.
     // Sort in place before deriving holes; no extra firmware allocation is needed.
     buffer.sort();
-    let entries = buffer.entries().map(|entry| MemoryMapEntry {
-        physical_address_start: entry.phys_start as usize,
-        page_count: entry.page_count as usize,
-        memory_type: match entry.ty {
-            MemoryType::CONVENTIONAL | MemoryType::PERSISTENT_MEMORY => MemoryMapType::Free,
-            MemoryType::RESERVED
-            | MemoryType::BOOT_SERVICES_CODE
-            | MemoryType::BOOT_SERVICES_DATA
-            | MemoryType::RUNTIME_SERVICES_CODE
-            | MemoryType::RUNTIME_SERVICES_DATA
-            | MemoryType::UNUSABLE
-            | MemoryType::ACPI_NON_VOLATILE
-            | MemoryType::PAL_CODE => MemoryMapType::Reserved,
-            // Firmware tables remain mappable, but are not normal allocator RAM.
-            // This also preserves the existing treatment of loader/MMIO/unknown types.
-            _ => MemoryMapType::Device,
-        },
+    let entries = buffer.entries().map(|entry| {
+        let memory_type = policy::classify(entry.ty);
+        if matches!(
+            entry.ty,
+            MemoryType::ACPI_RECLAIM | MemoryType::ACPI_NON_VOLATILE
+        ) {
+            crate::info!(
+                "ACPI memory: type={:?} paddr={:#x} pages={:#x} -> {:?}",
+                entry.ty,
+                entry.phys_start,
+                entry.page_count,
+                memory_type
+            );
+        }
+        MemoryMapEntry {
+            physical_address_start: entry.phys_start as usize,
+            page_count: entry.page_count as usize,
+            memory_type,
+        }
     });
 
     // Boot is single-threaded and the static output must survive ExitBootServices.
